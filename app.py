@@ -9,27 +9,64 @@ from langchain_community.agent_toolkits import create_sql_agent
 import os
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="AI SQL Data Analyst", page_icon="🚀", layout="wide")
-st.title("🚀 AI SQL Data Analyst Agent")
-st.markdown("Upload a CSV and ask questions in natural language. This agent will convert your question to SQL and execute it.")
+st.set_page_config(page_title="AI SQL Analyst", page_icon="🚀", layout="wide")
 
-# --- SIDEBAR: API KEY ---
+# --- STYLE CUSTOMIZATION ---
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f5f7f9;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 5px;
+        height: 3em;
+        background-color: #007bff;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("🚀 AI SQL Data Analyst Agent")
+st.markdown("Upload a CSV and chat with your data using natural language.")
+
+# --- API KEY & CONFIGURATION ---
+# Check Streamlit Secrets first, then fallback to Sidebar input
+groq_api_key = None
+
+if "GROQ_API_KEY" in st.secrets:
+    groq_api_key = st.secrets["GROQ_API_KEY"]
+else:
+    with st.sidebar:
+        st.header("🔑 API Configuration")
+        groq_api_key = st.text_input("Enter Groq API Key", type="password")
+        if not groq_api_key:
+            st.warning("Please provide an API key to continue.")
+            st.info("Tip: Add 'GROQ_API_KEY' to your Streamlit Secrets to skip this.")
+
 with st.sidebar:
-    st.header("Configuration")
-    groq_api_key = st.text_input("Enter Groq API Key", type="password")
-    model_name = st.selectbox("Select Model", ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768"])
-    st.info("Get your key at: [console.groq.com](https://console.groq.com/)")
+    model_name = st.selectbox(
+        "Select Model", 
+        ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768"],
+        index=1
+    )
+    st.divider()
+    st.markdown("### How to use")
+    st.write("1. Upload a CSV file")
+    st.write("2. Ask a question (e.g. 'What is the average price?')")
+    st.write("3. Mention 'chart' to see a visual.")
 
 # --- DATA LOADING ---
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file:
-    # Read CSV
+    # Load and Preview Data
     df = pd.read_csv(uploaded_file)
-    st.write("### Data Preview", df.head(5))
+    with st.expander("👀 View Data Preview"):
+        st.dataframe(df.head(10), use_container_width=True)
 
     # Create SQLite Engine (In-Memory)
-    # Using 'data_table' as the fixed table name for the agent to find easily
+    # We name the table 'data_table' so the Agent can find it easily
     engine = create_engine("sqlite:///temp_data.db")
     df.to_sql("data_table", engine, index=False, if_exists="replace")
     db = SQLDatabase(engine)
@@ -43,8 +80,7 @@ if uploaded_file:
                 temperature=0
             )
 
-            # Create LangChain SQL Agent 
-            # Note: agent_type is passed as a string to avoid versioning import errors
+            # Create LangChain SQL Agent using string-based type for stability
             agent_executor = create_sql_agent(
                 llm=llm,
                 db=db,
@@ -54,43 +90,45 @@ if uploaded_file:
             )
 
             # --- CHAT INTERFACE ---
-            user_question = st.text_input("Ask a question about your data (e.g., 'What is the total revenue?' or 'Show a bar chart of sales by product')")
+            st.divider()
+            user_question = st.text_input("💬 Ask your data a question:", placeholder="e.g., Which product has the highest sales?")
 
             if user_question:
-                with st.spinner("Analyzing data..."):
-                    # Execute the query
-                    response = agent_executor.invoke({"input": user_question})
-                    
-                    st.success("Analysis Complete!")
-                    
-                    # Layout for Results
-                    col1, col2 = st.columns([1, 1])
+                with st.spinner("🤖 Agent is thinking and writing SQL..."):
+                    try:
+                        # Invoke Agent
+                        response = agent_executor.invoke({"input": user_question})
+                        
+                        # Layout for Results
+                        col1, col2 = st.columns([1, 1])
 
-                    with col1:
-                        st.markdown("### 🤖 Answer")
-                        st.write(response["output"])
+                        with col1:
+                            st.subheader("🤖 Analysis")
+                            st.info(response["output"])
 
-                    with col2:
-                        st.markdown("### 📊 Visualization")
-                        # Basic logic to trigger a plot if keywords are mentioned
-                        if any(word in user_question.lower() for word in ["chart", "plot", "graph", "visualize"]):
-                            try:
+                        with col2:
+                            st.subheader("📊 Visualization")
+                            # Trigger chart logic if keywords exist
+                            if any(word in user_question.lower() for word in ["chart", "plot", "graph", "visualize"]):
                                 numeric_cols = df.select_dtypes(include=['number']).columns
                                 if len(numeric_cols) >= 1:
-                                    # Defaulting to a histogram for distribution if not specified
-                                    fig = px.histogram(df, x=numeric_cols[0], title=f"Distribution of {numeric_cols[0]}")
+                                    # Logic for a simple auto-chart
+                                    fig = px.bar(df.head(20), x=df.columns[0], y=numeric_cols[0], 
+                                                 title=f"{numeric_cols[0]} by {df.columns[0]}")
                                     st.plotly_chart(fig, use_container_width=True)
                                 else:
-                                    st.warning("No numeric columns found to create a chart.")
-                            except Exception as viz_err:
-                                st.error(f"Could not generate visual: {viz_err}")
-                        else:
-                            st.info("Tip: Ask to 'show a chart' to see data visualizations.")
+                                    st.warning("No numeric data found for visualization.")
+                            else:
+                                st.write("No chart requested. Try asking: 'Show me a bar chart of [column].'")
+
+                    except Exception as e:
+                        st.error(f"Execution Error: {e}")
 
         except Exception as e:
-            st.error(f"Agent Error: {e}")
-    else:
-        st.warning("Please enter your Groq API Key in the sidebar to begin.")
-
+            st.error(f"Agent Initialization Error: {e}")
 else:
-    st.info("Please upload a CSV file to start the analysis.")
+    st.info("Waiting for a CSV file to be uploaded...")
+
+# --- FOOTER ---
+st.divider()
+st.caption("Built with LangChain, Groq, and Streamlit.")
