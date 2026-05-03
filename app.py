@@ -11,7 +11,7 @@ import os
 st.set_page_config(page_title="AI SQL Analyst", page_icon="🚀", layout="wide")
 
 st.title("🚀 AI SQL Data Analyst Agent")
-st.markdown("Upload a CSV and chat with your data. Powered by Llama 3.3 and GPT-OSS.")
+st.markdown("Upload a CSV and chat with your data. **Model: Llama 3.3 70B Versatile**")
 
 # --- API KEY & CONFIGURATION ---
 groq_api_key = None
@@ -27,20 +27,11 @@ else:
             st.warning("Please provide an API key to continue.")
 
 with st.sidebar:
-    st.header("⚙️ Model Settings")
-    # Current active production models for May 2026
-    model_name = st.selectbox(
-        "Select Model", 
-        [
-            "llama-3.3-70b-versatile",  # High reasoning (replaces 70B legacy)
-            "llama-3.1-8b-instant",     # Ultra-fast, low latency
-            "openai/gpt-oss-120b",      # Advanced 120B reasoning model
-            "openai/gpt-oss-20b"        # Fast, cost-effective alternative
-        ],
-        index=0
-    )
+    st.header("⚙️ Model Info")
+    # Locked to llama-3.3-70b-versatile as requested
+    st.success("Using: llama-3.3-70b-versatile")
     st.divider()
-    st.info("Tip: Llama-3.3 is best for complex data relationships.")
+    st.info("This model is optimized for complex SQL generation and data reasoning.")
 
 # --- DATA LOADING ---
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
@@ -58,9 +49,10 @@ if uploaded_file:
     # --- AGENT SETUP ---
     if groq_api_key:
         try:
+            # Initializing specifically with Llama 3.3 70B
             llm = ChatGroq(
                 groq_api_key=groq_api_key, 
-                model_name=model_name,
+                model_name="llama-3.3-70b-versatile",
                 temperature=0
             )
 
@@ -75,10 +67,10 @@ if uploaded_file:
 
             # --- CHAT INTERFACE ---
             st.divider()
-            user_question = st.text_input("💬 Ask your data a question:", placeholder="e.g., What is the total sales per region?")
+            user_question = st.text_input("💬 Ask your data a question:", placeholder="e.g., Which category has the highest average price?")
 
             if user_question:
-                with st.spinner("🤖 Agent is analyzing..."):
+                with st.spinner("🤖 Llama 3.3 is analyzing..."):
                     try:
                         response = agent_executor.invoke({"input": user_question})
                         
@@ -90,15 +82,14 @@ if uploaded_file:
                         with col2:
                             st.subheader("📊 Visualization")
                             if any(word in user_question.lower() for word in ["chart", "plot", "graph"]):
-                                # SMARTER VISUALIZATION LOGIC: Avoids the "ID vs ID" trap
+                                # SMARTER VISUALIZATION LOGIC
                                 numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
                                 categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 
-                                # Filter out "ID" columns to find meaningful values
+                                # Filter out "ID" columns for the Y-axis
                                 filtered_numeric = [c for c in numeric_cols if 'id' not in c.lower()]
                                 
                                 if len(numeric_cols) >= 1:
-                                    # Pick Categorical for X-axis, Price/Quantity for Y-axis
                                     x_axis = categorical_cols[0] if categorical_cols else numeric_cols[0]
                                     y_axis = filtered_numeric[0] if filtered_numeric else numeric_cols[0]
 
