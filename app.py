@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import plotly.express as px
 from sqlalchemy import create_engine
 from langchain_groq import ChatGroq
@@ -11,29 +10,13 @@ import os
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="AI SQL Analyst", page_icon="🚀", layout="wide")
 
-# --- STYLE CUSTOMIZATION ---
-st.markdown("""
-    <style>
-    .main {
-        background-color: #f5f7f9;
-    }
-    .stButton>button {
-        width: 100%;
-        border-radius: 5px;
-        height: 3em;
-        background-color: #007bff;
-        color: white;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 st.title("🚀 AI SQL Data Analyst Agent")
-st.markdown("Upload a CSV and chat with your data using natural language.")
+st.markdown("Upload a CSV and chat with your data. Powered by Llama 3.3 and GPT-OSS.")
 
 # --- API KEY & CONFIGURATION ---
-# Check Streamlit Secrets first, then fallback to Sidebar input
 groq_api_key = None
 
+# Prioritize Streamlit Secrets for security
 if "GROQ_API_KEY" in st.secrets:
     groq_api_key = st.secrets["GROQ_API_KEY"]
 else:
@@ -42,31 +25,31 @@ else:
         groq_api_key = st.text_input("Enter Groq API Key", type="password")
         if not groq_api_key:
             st.warning("Please provide an API key to continue.")
-            st.info("Tip: Add 'GROQ_API_KEY' to your Streamlit Secrets to skip this.")
 
 with st.sidebar:
+    st.header("⚙️ Model Settings")
+    # Updated active production models for 2026
     model_name = st.selectbox(
         "Select Model", 
-        ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768"],
-        index=1
+        [
+            "llama-3.3-70b-versatile",  # High reasoning, tool use
+            "llama-3.1-8b-instant",     # Ultra-fast, low latency
+            "openai/gpt-oss-120b"       # Advanced 120B reasoning model
+        ],
+        index=0
     )
     st.divider()
-    st.markdown("### How to use")
-    st.write("1. Upload a CSV file")
-    st.write("2. Ask a question (e.g. 'What is the average price?')")
-    st.write("3. Mention 'chart' to see a visual.")
+    st.info("Tip: Llama-3.3 is best for complex data relationships.")
 
 # --- DATA LOADING ---
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file:
-    # Load and Preview Data
     df = pd.read_csv(uploaded_file)
     with st.expander("👀 View Data Preview"):
         st.dataframe(df.head(10), use_container_width=True)
 
-    # Create SQLite Engine (In-Memory)
-    # We name the table 'data_table' so the Agent can find it easily
+    # In-Memory SQLite Setup
     engine = create_engine("sqlite:///temp_data.db")
     df.to_sql("data_table", engine, index=False, if_exists="replace")
     db = SQLDatabase(engine)
@@ -80,7 +63,7 @@ if uploaded_file:
                 temperature=0
             )
 
-            # Create LangChain SQL Agent using string-based type for stability
+            # LangChain Agent utilizing string-based identification for stability
             agent_executor = create_sql_agent(
                 llm=llm,
                 db=db,
@@ -91,35 +74,30 @@ if uploaded_file:
 
             # --- CHAT INTERFACE ---
             st.divider()
-            user_question = st.text_input("💬 Ask your data a question:", placeholder="e.g., Which product has the highest sales?")
+            user_question = st.text_input("💬 Ask your data a question:", placeholder="e.g., What is the total sales per region?")
 
             if user_question:
-                with st.spinner("🤖 Agent is thinking and writing SQL..."):
+                with st.spinner("🤖 Agent is analyzing..."):
                     try:
-                        # Invoke Agent
                         response = agent_executor.invoke({"input": user_question})
                         
-                        # Layout for Results
                         col1, col2 = st.columns([1, 1])
-
                         with col1:
                             st.subheader("🤖 Analysis")
                             st.info(response["output"])
 
                         with col2:
                             st.subheader("📊 Visualization")
-                            # Trigger chart logic if keywords exist
-                            if any(word in user_question.lower() for word in ["chart", "plot", "graph", "visualize"]):
+                            if any(word in user_question.lower() for word in ["chart", "plot", "graph"]):
                                 numeric_cols = df.select_dtypes(include=['number']).columns
                                 if len(numeric_cols) >= 1:
-                                    # Logic for a simple auto-chart
                                     fig = px.bar(df.head(20), x=df.columns[0], y=numeric_cols[0], 
                                                  title=f"{numeric_cols[0]} by {df.columns[0]}")
                                     st.plotly_chart(fig, use_container_width=True)
                                 else:
-                                    st.warning("No numeric data found for visualization.")
+                                    st.warning("No numeric columns available.")
                             else:
-                                st.write("No chart requested. Try asking: 'Show me a bar chart of [column].'")
+                                st.write("Ask for a 'chart' to see visuals.")
 
                     except Exception as e:
                         st.error(f"Execution Error: {e}")
@@ -127,8 +105,4 @@ if uploaded_file:
         except Exception as e:
             st.error(f"Agent Initialization Error: {e}")
 else:
-    st.info("Waiting for a CSV file to be uploaded...")
-
-# --- FOOTER ---
-st.divider()
-st.caption("Built with LangChain, Groq, and Streamlit.")
+    st.info("Please upload a CSV file to begin.")
