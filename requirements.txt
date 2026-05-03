@@ -3,7 +3,6 @@ pandas
 langchain
 langchain-community
 langchain-groq
-langchain-openai
 sqlalchemy
 matplotlib
 plotly
