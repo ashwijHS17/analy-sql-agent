@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from langchain_groq import ChatGroq
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import create_sql_agent
-from langchain.agents.agent_types import AgentType
+from langchain.agents import AgentType
 import os
 
 # --- PAGE CONFIG ---
