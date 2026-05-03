@@ -28,13 +28,14 @@ else:
 
 with st.sidebar:
     st.header("⚙️ Model Settings")
-    # Updated active production models for 2026
+    # Current active production models for May 2026
     model_name = st.selectbox(
         "Select Model", 
         [
-            "llama-3.3-70b-versatile",  # High reasoning, tool use
+            "llama-3.3-70b-versatile",  # High reasoning (replaces 70B legacy)
             "llama-3.1-8b-instant",     # Ultra-fast, low latency
-            "openai/gpt-oss-120b"       # Advanced 120B reasoning model
+            "openai/gpt-oss-120b",      # Advanced 120B reasoning model
+            "openai/gpt-oss-20b"        # Fast, cost-effective alternative
         ],
         index=0
     )
@@ -89,10 +90,26 @@ if uploaded_file:
                         with col2:
                             st.subheader("📊 Visualization")
                             if any(word in user_question.lower() for word in ["chart", "plot", "graph"]):
-                                numeric_cols = df.select_dtypes(include=['number']).columns
+                                # SMARTER VISUALIZATION LOGIC: Avoids the "ID vs ID" trap
+                                numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+                                categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+
+                                # Filter out "ID" columns to find meaningful values
+                                filtered_numeric = [c for c in numeric_cols if 'id' not in c.lower()]
+                                
                                 if len(numeric_cols) >= 1:
-                                    fig = px.bar(df.head(20), x=df.columns[0], y=numeric_cols[0], 
-                                                 title=f"{numeric_cols[0]} by {df.columns[0]}")
+                                    # Pick Categorical for X-axis, Price/Quantity for Y-axis
+                                    x_axis = categorical_cols[0] if categorical_cols else numeric_cols[0]
+                                    y_axis = filtered_numeric[0] if filtered_numeric else numeric_cols[0]
+
+                                    fig = px.bar(
+                                        df.head(20), 
+                                        x=x_axis, 
+                                        y=y_axis, 
+                                        title=f"{y_axis} by {x_axis}",
+                                        color=x_axis if categorical_cols else None,
+                                        template="plotly_dark"
+                                    )
                                     st.plotly_chart(fig, use_container_width=True)
                                 else:
                                     st.warning("No numeric columns available.")
